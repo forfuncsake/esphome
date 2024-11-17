@@ -24,7 +24,6 @@ void Powerpal::setup() {
 
 #ifdef USE_HTTP_REQUEST
     this->stored_measurements_.resize(15); //TODO dynamic
-    this->cloud_uploader_->set_method("POST");
 #endif
 }
 
@@ -193,10 +192,8 @@ void Powerpal::upload_data_to_cloud_() {
     }
     std::string body;
     serializeJson(doc, body);
-    this->cloud_uploader_->set_body(body);
-    // empty triggers, but requirement of using the send function
-    std::vector<http_request::HttpRequestResponseTrigger *> response_triggers_;
-    this->cloud_uploader_->send(response_triggers_);
+
+    this->cloud_uploader_->post(this->powerpal_api_root_, body, this->powerpal_headers_);
   } else {
     // apikey or device missing
   }
@@ -324,7 +321,6 @@ void Powerpal::gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_t gat
         ESP_LOGI(TAG, "Powerpal device id: %s", this->powerpal_device_id_.c_str());
 #ifdef USE_HTTP_REQUEST
         this->powerpal_api_root_.append(this->powerpal_device_id_);
-        this->cloud_uploader_->set_url(this->powerpal_api_root_);
 #endif
         break;
       }
@@ -344,11 +340,9 @@ void Powerpal::gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_t gat
         http_request::Header authheader;
         authheader.name = "Authorization";
         authheader.value = this->powerpal_apikey_.c_str();
-        std::list<http_request::Header> headers;
-        headers.push_back(acceptheader);
-        headers.push_back(contentheader);
-        headers.push_back(authheader);
-        this->cloud_uploader_->set_headers(headers);
+        this->powerpal_headers_.push_back(acceptheader);
+        this->powerpal_headers_.push_back(contentheader);
+        this->powerpal_headers_.push_back(authheader);
 #endif
         break;
       }
