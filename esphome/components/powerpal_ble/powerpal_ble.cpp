@@ -183,12 +183,14 @@ void Powerpal::upload_data_to_cloud_() {
     StaticJsonDocument<2048> doc; // 768 bytes, each entry may take up 15 bytes (uint16_t + uint32_t + uint32_t + float + bool)
     JsonArray array = doc.to<JsonArray>();
     for (int i = 0; i < 15; i++) {
-      JsonObject nested = array.createNestedObject();
-      nested["timestamp"] = this->stored_measurements_[i].timestamp;
-      nested["pulses"] = this->stored_measurements_[i].pulses;
-      nested["watt_hours"] = this->stored_measurements_[i].watt_hours;
-      nested["cost"] = this->stored_measurements_[i].cost;
-      nested["is_peak"] = false;
+      if (this->stored_measurements_[i].timestamp > 0) {
+        JsonObject nested = array.createNestedObject();
+        nested["timestamp"] = this->stored_measurements_[i].timestamp;
+        nested["pulses"] = this->stored_measurements_[i].pulses;
+        nested["watt_hours"] = this->stored_measurements_[i].watt_hours;
+        nested["cost"] = this->stored_measurements_[i].cost;
+        nested["is_peak"] = false;
+      }
     }
     std::string body;
     serializeJson(doc, body);
