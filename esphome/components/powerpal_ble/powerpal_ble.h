@@ -148,7 +148,7 @@ class Powerpal : public esphome::ble_client::BLEClientNode, public Component {
   uint16_t pairing_code_char_handle_ = 0x2e;
   uint16_t reading_batch_size_char_handle_ = 0x33;
   uint16_t measurement_char_handle_ = 0x14;
-  uint16_t measurement_acccess_char_handle_ = 0x17;
+  uint16_t measurement_access_char_handle_ = 0x17;
 
   uint16_t battery_char_handle_ = 0x10;
   uint16_t led_sensitivity_char_handle_ = 0x25;

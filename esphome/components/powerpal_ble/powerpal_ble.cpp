@@ -287,7 +287,7 @@ void Powerpal::gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_t gat
       }
 
       // first record
-      if (param->read.handle == this->first_record_char_handle_) {
+      if (param->read.handle == this->first_rec_char_handle_) {
         ESP_LOGD(TAG, "Recieved first record read event");
         this->process_first_rec_(param->read.value, param->read.value_len);
         break;
