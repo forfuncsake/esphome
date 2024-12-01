@@ -23,30 +23,10 @@ void Powerpal::setup() {
   ESP_LOGD(TAG, "pulse_multiplier_: %f", this->pulse_multiplier_ );
 
 #ifdef USE_HTTP_REQUEST
+    this->past_measurements_.resize(15); //TODO dynamic
     this->stored_measurements_.resize(15); //TODO dynamic
 #endif
 }
-
-// void Powerpal::loop() {
-//   // for (uint16_t i = 0; i < 15; i++) {
-//   //   uint32_t timestamp = 1632487923494;
-//   //   this->store_measurement_(i, timestamp+i);
-//   // }
-//   // this->upload_data_to_cloud_();
-
-//   if (this->stored_measurements_.size()) {
-//     uint32_t timestamp = 1632487923494;
-//     this->store_measurement_(
-//         this->stored_measurements_count_,
-//         timestamp + this->stored_measurements_count_,
-//         (uint32_t)roundf(this->stored_measurements_count_ * (this->pulses_per_kwh_ / kw_to_w_conversion)),
-//         (this->stored_measurements_count_ / this->pulses_per_kwh_) * this->energy_cost_
-//       );
-//     if (this->stored_measurements_count_ == 14) {
-//       this->upload_data_to_cloud_();
-//     }
-//   }
-// }
 
 std::string Powerpal::pkt_to_hex_(const uint8_t *data, uint16_t len) {
   char buf[64];
@@ -68,6 +48,42 @@ void Powerpal::parse_battery_(const uint8_t *data, uint16_t length) {
   }
 }
 
+void Powerpal::process_first_rec_(const uint8_t *data, uint16_t length) {
+  ESP_LOGD(TAG, "First Record: DEC(%d): 0x%s", length, this->pkt_to_hex_(data, length).c_str());
+  if (length < 4) {
+    return;
+  }
+
+  // time_t unix_time = data[0];
+  // unix_time += (data[1] << 8);
+  // unix_time += (data[2] << 16);
+  // unix_time += (data[3] << 24);
+
+  uint8_t payload[8];
+  payload[0] = data[0];
+  payload[1] = data[1];
+  payload[2] = data[2];
+  payload[3] = data[3];
+
+  uint32_t tmp = (data[3] << 24) | (data[2] << 16) | (data[1] << 8) | (data[0]);
+  tmp += 600;
+  payload[4] = (tmp & 0xff);
+  payload[5] = ((tmp >> 8) & 0xff);
+  payload[6] = ((tmp >> 16) & 0xff);
+  payload[7] = ((tmp >> 24) & 0xff);
+
+  ESP_LOGD(TAG, "Requesting MeasurementAccess: DEC(%d): 0x%s", length, this->pkt_to_hex_(payload, 8).c_str());
+
+  //send us 10ish minutes of sotred measurements
+  auto maStatus =
+          esp_ble_gattc_write_char(this->parent()->get_gattc_if(), this->parent()->get_conn_id(),
+                                   this->measurement_access_char_handle_, 8,
+                                   payload, ESP_GATT_WRITE_TYPE_RSP, ESP_GATT_AUTH_REQ_NONE);
+  if (maStatus) {
+    ESP_LOGW(TAG, "Error sending write request for measurementAccess, status=%d", maStatus);
+  }
+}
+
 void Powerpal::parse_measurement_(const uint8_t *data, uint16_t length) {
   ESP_LOGD(TAG, "Meaurement: DEC(%d): 0x%s", length, this->pkt_to_hex_(data, length).c_str());
   if (length >= 6) {
@@ -82,6 +98,7 @@ void Powerpal::parse_measurement_(const uint8_t *data, uint16_t length) {
     // float total_kwh_within_interval = pulses_within_interval / this->pulses_per_kwh_;
     float avg_watts_within_interval = pulses_within_interval * this->pulse_multiplier_;
 
+    ESP_LOGD(TAG, "Current Time: %ld", (long)std::time(0));
     ESP_LOGI(TAG, "Timestamp: %ld, Pulses: %d, Average Watts within interval: %f W", unix_time, pulses_within_interval,
              avg_watts_within_interval);
 
@@ -210,54 +227,6 @@ void Powerpal::gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_t gat
       break;
     }
     case ESP_GATTC_SEARCH_CMPL_EVT: {
-      // auto *pairing_code_char_ = this->parent()->get_characteristic(POWERPAL_SERVICE_UUID,
-      // POWERPAL_CHARACTERISTIC_PAIRING_CODE_UUID); if (pairing_code_char_ == nullptr) {
-      //   ESP_LOGE(TAG, "[%s] No Powerpal service or Pairing Code Characteristic found at device, not a POWERPAL..?",
-      //             this->parent()->address_str().c_str());
-      //   break;
-      // } else {
-      //   this->pairing_code_char_handle_ = pairing_code_char_->handle;
-      // }
-
-      // auto *reading_batch_size_char_ = this->parent()->get_characteristic(POWERPAL_SERVICE_UUID,
-      // POWERPAL_CHARACTERISTIC_READING_BATCH_SIZE_UUID); if (reading_batch_size_char_ == nullptr) {
-      //   ESP_LOGE(TAG, "[%s] No Powerpal service or Reading Batch Size Characteristic found at device, not a
-      //   POWERPAL..?",
-      //             this->parent()->address_str().c_str());
-      //   break;
-      // } else {
-      //   this->reading_batch_size_char_handle_ = reading_batch_size_char_->handle;
-      // }
-
-      // auto *measurement_char_ = this->parent()->get_characteristic(POWERPAL_SERVICE_UUID,
-      // POWERPAL_CHARACTERISTIC_MEASUREMENT_UUID); if (measurement_char_ == nullptr) {
-      //   ESP_LOGE(TAG, "[%s] No Powerpal service or Measurement Characteristic found at device, not a POWERPAL..?",
-      //             this->parent()->address_str().c_str());
-      //   break;
-      // } else {
-      //   this->measurement_char_handle_ = measurement_char_->handle;
-      // }
-
-      // auto *uuid_char_ = this->parent()->get_characteristic(POWERPAL_SERVICE_UUID,
-      // POWERPAL_CHARACTERISTIC_UUID_UUID); if (uuid_char_ == nullptr) {
-      //   ESP_LOGE(TAG, "[%s] No Powerpal service or Measurement Characteristic found at device, not a POWERPAL..?",
-      //             this->parent()->address_str().c_str());
-      //   break;
-      // } else {
-      //   this->uuid_char_handle_ = uuid_char_->handle;
-      //   ESP_LOGE(TAG, "UUID HANDLE: %d",this->uuid_char_handle_);
-      // }
-
-      // auto *serial_char_ = this->parent()->get_characteristic(POWERPAL_SERVICE_UUID,
-      // POWERPAL_CHARACTERISTIC_SERIAL_UUID); if (serial_char_ == nullptr) {
-      //   ESP_LOGE(TAG, "[%s] No Powerpal service or Measurement Characteristic found at device, not a POWERPAL..?",
-      //             this->parent()->address_str().c_str());
-      //   break;
-      // } else {
-      //   this->serial_number_char_handle_ = serial_char_->handle;
-      //   ESP_LOGE(TAG, "SERIAL HANDLE: %d",this->serial_number_char_handle_);
-      // }
-
       break;
     }
     case ESP_GATTC_READ_CHAR_EVT: {
@@ -288,6 +257,14 @@ void Powerpal::gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_t gat
               ESP_LOGW(TAG, "[%s] esp_ble_gattc_register_for_notify failed, status=%d",
                        this->parent()->address_str().c_str(), status);
             }
+
+            // read first record to fill in missing history
+            auto read_first_rec_status =
+                esp_ble_gattc_read_char(this->parent()->get_gattc_if(), this->parent()->get_conn_id(),
+                                        this->first_rec_char_handle_, ESP_GATT_AUTH_REQ_NONE);
+            if (read_first_rec_status) {
+              ESP_LOGW(TAG, "Error sending read request for first record, status=%d", read_first_rec_status);
+            }
           }
         } else {
           // error, length should be 4
@@ -309,10 +286,24 @@ void Powerpal::gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_t gat
         break;
       }
 
+      // first record
+      if (param->read.handle == this->first_record_char_handle_) {
+        ESP_LOGD(TAG, "Recieved first record read event");
+        this->process_first_rec_(param->read.value, param->read.value_len);
+        break;
+      }
+
       // led sensitivity
       if (param->read.handle == this->led_sensitivity_char_handle_) {
         ESP_LOGD(TAG, "Recieved led sensitivity read event");
         this->decode_(param->read.value, param->read.value_len);
+        break;
+      } 
+      
+      // measurement
+      if (param->read.handle == this->measurement_char_handle_) {
+        ESP_LOGD(TAG, "Recieved measurement read event");
+        this->parse_measurement_(param->read.value, param->read.value_len);
         break;
       }
 
@@ -427,6 +418,14 @@ void Powerpal::gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_t gat
         if (status) {
           ESP_LOGW(TAG, "[%s] esp_ble_gattc_register_for_notify failed, status=%d",
                    this->parent()->address_str().c_str(), status);
+        }
+
+        // read first record to fill in missing history
+        auto read_first_rec_status =
+            esp_ble_gattc_read_char(this->parent()->get_gattc_if(), this->parent()->get_conn_id(),
+                                    this->first_rec_char_handle_, ESP_GATT_AUTH_REQ_NONE);
+        if (read_first_rec_status) {
+          ESP_LOGW(TAG, "Error sending read request for first record, status=%d", read_first_rec_status);
         }
         break;
       }

@@ -104,6 +104,7 @@ class Powerpal : public esphome::ble_client::BLEClientNode, public Component {
   void decode_(const uint8_t *data, uint16_t length);
   void parse_battery_(const uint8_t *data, uint16_t length);
   void parse_measurement_(const uint8_t *data, uint16_t length);
+  void process_first_rec_(const uint8_t *data, uint16_t length);
   std::string uuid_to_device_id_(const uint8_t *data, uint16_t length);
   std::string serial_to_apikey_(const uint8_t *data, uint16_t length);
 #ifdef USE_HTTP_REQUEST
@@ -133,6 +134,7 @@ class Powerpal : public esphome::ble_client::BLEClientNode, public Component {
   uint64_t total_pulses_{0};
 
   uint8_t stored_measurements_count_{0};
+  std::vector<PowerpalMeasurement> past_measurements_;
   std::vector<PowerpalMeasurement> stored_measurements_;
   // std::string powerpal_api_root_ = "http://192.168.1.167:1880/powerpal/";
   std::string powerpal_api_root_ = "https://readings.powerpal.net/api/v1/meter_reading/";
@@ -146,10 +148,12 @@ class Powerpal : public esphome::ble_client::BLEClientNode, public Component {
   uint16_t pairing_code_char_handle_ = 0x2e;
   uint16_t reading_batch_size_char_handle_ = 0x33;
   uint16_t measurement_char_handle_ = 0x14;
+  uint16_t measurement_acccess_char_handle_ = 0x17;
 
   uint16_t battery_char_handle_ = 0x10;
   uint16_t led_sensitivity_char_handle_ = 0x25;
   uint16_t firmware_char_handle_ = 0x3b;
+  uint16_t first_rec_char_handle_ = 0x20;
   uint16_t uuid_char_handle_ = 0x28;
   uint16_t serial_number_char_handle_ = 0x2b;
 };
