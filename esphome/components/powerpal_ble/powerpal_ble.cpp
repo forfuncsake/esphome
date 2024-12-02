@@ -133,7 +133,7 @@ void Powerpal::parse_measurement_(const uint8_t *data, uint16_t length) {
       }
       if (this->ingesting_history_) {
         // request next batch of history
-        this->requested_ts += 60
+        this->requested_ts += 60;
         uint8_t payload[8];
         payload[0] = (this->requested_ts_ & 0xff);
         payload[1] = ((this->requested_ts_ >> 8) & 0xff);
@@ -142,7 +142,7 @@ void Powerpal::parse_measurement_(const uint8_t *data, uint16_t length) {
 
         this->requested_ts_ += 840;
         if this->requested_ts_ > this->recent_ts_ {
-          this->requested_ts_ = this->recent_ts_
+          this->requested_ts_ = this->recent_ts_;
         }
         payload[4] = (this->requested_ts_ & 0xff);
         payload[5] = ((this->requested_ts_ >> 8) & 0xff);
@@ -210,7 +210,7 @@ void Powerpal::process_first_rec_(const uint8_t *data, uint16_t length) {
   // Request history in 15-measurement batches.
   this->requested_ts_ += 840;
   if this->requested_ts_ > this->recent_ts_ {
-    this->requested_ts_ = this->recent_ts_
+    this->requested_ts_ = this->recent_ts_;
   }
   payload[4] = (this->requested_ts_ & 0xff);
   payload[5] = ((this->requested_ts_ >> 8) & 0xff);

@@ -141,8 +141,8 @@ class Powerpal : public esphome::ble_client::BLEClientNode, public Component {
   std::vector<PowerpalMeasurement> past_measurements_;
   std::vector<PowerpalMeasurement> stored_measurements_;
   std::string powerpal_api_root_ = "https://readings.powerpal.net";
-  std::string powerpal_api_device_ = "/api/v1/device/"
-  std::string powerpal_api_meter_ = "/api/v1/meter_reading/"
+  std::string powerpal_api_device_ = "/api/v1/device/";
+  std::string powerpal_api_meter_ = "/api/v1/meter_reading/";
   std::string powerpal_device_id_; // = "00002bc3";
   std::string powerpal_apikey_; // = "4a89e298-b17b-43e7-a0c1-fcd1412e98ef";
 #ifdef USE_HTTP_REQUEST
