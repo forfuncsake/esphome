@@ -23,7 +23,6 @@ void Powerpal::setup() {
   ESP_LOGD(TAG, "pulse_multiplier_: %f", this->pulse_multiplier_ );
 
 #ifdef USE_HTTP_REQUEST
-    this->past_measurements_.resize(15); //TODO dynamic
     this->stored_measurements_.resize(15); //TODO dynamic
 #endif
 }
@@ -48,42 +47,6 @@ void Powerpal::parse_battery_(const uint8_t *data, uint16_t length) {
   }
 }
 
-void Powerpal::process_first_rec_(const uint8_t *data, uint16_t length) {
-  ESP_LOGD(TAG, "First Record: DEC(%d): 0x%s", length, this->pkt_to_hex_(data, length).c_str());
-  if (length < 4) {
-    return;
-  }
-
-  // time_t unix_time = data[0];
-  // unix_time += (data[1] << 8);
-  // unix_time += (data[2] << 16);
-  // unix_time += (data[3] << 24);
-
-  uint8_t payload[8];
-  payload[0] = data[0];
-  payload[1] = data[1];
-  payload[2] = data[2];
-  payload[3] = data[3];
-
-  uint32_t tmp = (data[3] << 24) | (data[2] << 16) | (data[1] << 8) | (data[0]);
-  tmp += 600;
-  payload[4] = (tmp & 0xff);
-  payload[5] = ((tmp >> 8) & 0xff);
-  payload[6] = ((tmp >> 16) & 0xff);
-  payload[7] = ((tmp >> 24) & 0xff);
-
-  ESP_LOGD(TAG, "Requesting MeasurementAccess: DEC(%d): 0x%s", length, this->pkt_to_hex_(payload, 8).c_str());
-
-  //send us 10ish minutes of sotred measurements
-  auto maStatus =
-          esp_ble_gattc_write_char(this->parent()->get_gattc_if(), this->parent()->get_conn_id(),
-                                   this->measurement_access_char_handle_, 8,
-                                   payload, ESP_GATT_WRITE_TYPE_RSP, ESP_GATT_AUTH_REQ_NONE);
-  if (maStatus) {
-    ESP_LOGW(TAG, "Error sending write request for measurementAccess, status=%d", maStatus);
-  }
-}
-
 void Powerpal::parse_measurement_(const uint8_t *data, uint16_t length) {
   ESP_LOGD(TAG, "Meaurement: DEC(%d): 0x%s", length, this->pkt_to_hex_(data, length).c_str());
   if (length >= 6) {
@@ -92,13 +55,24 @@ void Powerpal::parse_measurement_(const uint8_t *data, uint16_t length) {
     unix_time += (data[2] << 16);
     unix_time += (data[3] << 24);
 
+#ifdef USE_HTTP_REQUEST
+    if (this->ingesting_history_ && unix_time > this->recent_ts_) {
+      // Drop this record for now, we'll get it again later once caught up.
+      this->recent_ts_ = unix_time;
+      return;
+    }
+    if (unix_time >= this->recent_ts_) {
+      // we're all caught up
+      this->ingesting_history_ = false;
+    }
+#endif
+
     uint16_t pulses_within_interval = data[4];
     pulses_within_interval += data[5] << 8;
 
     // float total_kwh_within_interval = pulses_within_interval / this->pulses_per_kwh_;
     float avg_watts_within_interval = pulses_within_interval * this->pulse_multiplier_;
 
-    ESP_LOGD(TAG, "Current Time: %ld", (long)std::time(0));
     ESP_LOGI(TAG, "Timestamp: %ld, Pulses: %d, Average Watts within interval: %f W", unix_time, pulses_within_interval,
              avg_watts_within_interval);
 
@@ -154,8 +128,36 @@ void Powerpal::parse_measurement_(const uint8_t *data, uint16_t length) {
         (uint32_t)roundf(pulses_within_interval * (this->pulses_per_kwh_ / kw_to_w_conversion)),
         (pulses_within_interval / this->pulses_per_kwh_) * this->energy_cost_
       );
-      if (this->stored_measurements_count_ == 14) {
+      if (this->stored_measurements_count_ == 15) {
         this->upload_data_to_cloud_();
+      }
+      if (this->ingesting_history_) {
+        // request next batch of history
+        this->requested_ts += 60
+        uint8_t payload[8];
+        payload[0] = (this->requested_ts_ & 0xff);
+        payload[1] = ((this->requested_ts_ >> 8) & 0xff);
+        payload[2] = ((this->requested_ts_ >> 16) & 0xff);
+        payload[3] = ((this->requested_ts_ >> 24) & 0xff);
+
+        this->requested_ts_ += 840;
+        if this->requested_ts_ > this->recent_ts_ {
+          this->requested_ts_ = this->recent_ts_
+        }
+        payload[4] = (this->requested_ts_ & 0xff);
+        payload[5] = ((this->requested_ts_ >> 8) & 0xff);
+        payload[6] = ((this->requested_ts_ >> 16) & 0xff);
+        payload[7] = ((this->requested_ts_ >> 24) & 0xff);
+
+        ESP_LOGD(TAG, "Requesting MeasurementAccess: DEC(%d): 0x%s", length, this->pkt_to_hex_(payload, 8).c_str());
+
+        auto maStatus =
+                esp_ble_gattc_write_char(this->parent()->get_gattc_if(), this->parent()->get_conn_id(),
+                                        this->measurement_access_char_handle_, 8,
+                                        payload, ESP_GATT_WRITE_TYPE_RSP, ESP_GATT_AUTH_REQ_NONE);
+        if (maStatus) {
+          ESP_LOGW(TAG, "Error sending write request for measurementAccess, status=%d", maStatus);
+        }
       }
     }
 #endif
@@ -186,12 +188,52 @@ std::string Powerpal::serial_to_apikey_(const uint8_t *data, uint16_t length) {
 }
 
 #ifdef USE_HTTP_REQUEST
+void Powerpal::process_first_rec_(const uint8_t *data, uint16_t length) {
+  ESP_LOGD(TAG, "First Record: DEC(%d): 0x%s", length, this->pkt_to_hex_(data, length).c_str());
+  if (length < 8) {
+    return;
+  }
+
+  this->recent_ts_ = (data[7] << 24) | (data[6] << 16) | (data[5] << 8) | (data[4]);
+  this->requested_ts_ = (data[3] << 24) | (data[2] << 16) | (data[1] << 8) | (data[0]);
+
+  if (this->requested_ts_ < this->uploaded_ts_) {
+    this->requested_ts_ = this->uploaded_ts_;
+  }
+
+  uint8_t payload[8];
+  payload[0] = (this->requested_ts_ & 0xff);
+  payload[1] = ((this->requested_ts_ >> 8) & 0xff);
+  payload[2] = ((this->requested_ts_ >> 16) & 0xff);
+  payload[3] = ((this->requested_ts_ >> 24) & 0xff);
+
+  // Request history in 15-measurement batches.
+  this->requested_ts_ += 840;
+  if this->requested_ts_ > this->recent_ts_ {
+    this->requested_ts_ = this->recent_ts_
+  }
+  payload[4] = (this->requested_ts_ & 0xff);
+  payload[5] = ((this->requested_ts_ >> 8) & 0xff);
+  payload[6] = ((this->requested_ts_ >> 16) & 0xff);
+  payload[7] = ((this->requested_ts_ >> 24) & 0xff);
+
+  ESP_LOGD(TAG, "Requesting MeasurementAccess: DEC(%d): 0x%s", length, this->pkt_to_hex_(payload, 8).c_str());
+
+  auto maStatus =
+          esp_ble_gattc_write_char(this->parent()->get_gattc_if(), this->parent()->get_conn_id(),
+                                   this->measurement_access_char_handle_, 8,
+                                   payload, ESP_GATT_WRITE_TYPE_RSP, ESP_GATT_AUTH_REQ_NONE);
+  if (maStatus) {
+    ESP_LOGW(TAG, "Error sending write request for measurementAccess, status=%d", maStatus);
+  }
+}
+
 void Powerpal::store_measurement_(uint16_t pulses, time_t timestamp, uint32_t watt_hours, float cost) {
-  this->stored_measurements_count_++;
   this->stored_measurements_[this->stored_measurements_count_].pulses = pulses;
   this->stored_measurements_[this->stored_measurements_count_].timestamp = timestamp;
   this->stored_measurements_[this->stored_measurements_count_].watt_hours = watt_hours;
   this->stored_measurements_[this->stored_measurements_count_].cost = cost;
+  this->stored_measurements_count_++;
 }
 
 void Powerpal::upload_data_to_cloud_() {
@@ -212,7 +254,7 @@ void Powerpal::upload_data_to_cloud_() {
     std::string body;
     serializeJson(doc, body);
 
-    this->cloud_uploader_->post(this->powerpal_api_root_, body, this->powerpal_headers_);
+    this->cloud_uploader_->post(this->powerpal_api_root_ + this->powerpal_api_meter_, body, this->powerpal_headers_);
   } else {
     // apikey or device missing
   }
@@ -251,20 +293,7 @@ void Powerpal::gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_t gat
             }
           } else {
             // reading batch size is set correctly so subscribe to measurement notifications
-            auto status = esp_ble_gattc_register_for_notify(this->parent()->get_gattc_if(), this->parent()->get_remote_bda(),
-                                                            this->measurement_char_handle_);
-            if (status) {
-              ESP_LOGW(TAG, "[%s] esp_ble_gattc_register_for_notify failed, status=%d",
-                       this->parent()->address_str().c_str(), status);
-            }
-
-            // read first record to fill in missing history
-            auto read_first_rec_status =
-                esp_ble_gattc_read_char(this->parent()->get_gattc_if(), this->parent()->get_conn_id(),
-                                        this->first_rec_char_handle_, ESP_GATT_AUTH_REQ_NONE);
-            if (read_first_rec_status) {
-              ESP_LOGW(TAG, "Error sending read request for first record, status=%d", read_first_rec_status);
-            }
+            this->start_collection();
           }
         } else {
           // error, length should be 4
@@ -286,24 +315,19 @@ void Powerpal::gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_t gat
         break;
       }
 
+#ifdef USE_HTTP_REQUEST
       // first record
       if (param->read.handle == this->first_rec_char_handle_) {
         ESP_LOGD(TAG, "Recieved first record read event");
         this->process_first_rec_(param->read.value, param->read.value_len);
         break;
       }
+#endif
 
       // led sensitivity
       if (param->read.handle == this->led_sensitivity_char_handle_) {
         ESP_LOGD(TAG, "Recieved led sensitivity read event");
         this->decode_(param->read.value, param->read.value_len);
-        break;
-      } 
-      
-      // measurement
-      if (param->read.handle == this->measurement_char_handle_) {
-        ESP_LOGD(TAG, "Recieved measurement read event");
-        this->parse_measurement_(param->read.value, param->read.value_len);
         break;
       }
 
@@ -313,7 +337,8 @@ void Powerpal::gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_t gat
         this->powerpal_device_id_ = this->uuid_to_device_id_(param->read.value, param->read.value_len);
         ESP_LOGI(TAG, "Powerpal device id: %s", this->powerpal_device_id_.c_str());
 #ifdef USE_HTTP_REQUEST
-        this->powerpal_api_root_.append(this->powerpal_device_id_);
+        this->powerpal_api_device_.append(this->powerpal_device_id_);
+        this->powerpal_api_meter_.append(this->powerpal_device_id_);
 #endif
         break;
       }
@@ -413,20 +438,10 @@ void Powerpal::gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_t gat
       }
       if (param->write.handle == this->reading_batch_size_char_handle_) {
         // reading batch size is now set correctly so subscribe to measurement notifications
-        auto status = esp_ble_gattc_register_for_notify(this->parent()->get_gattc_if(), this->parent()->get_remote_bda(),
-                                                        this->measurement_char_handle_);
-        if (status) {
-          ESP_LOGW(TAG, "[%s] esp_ble_gattc_register_for_notify failed, status=%d",
-                   this->parent()->address_str().c_str(), status);
-        }
-
-        // read first record to fill in missing history
-        auto read_first_rec_status =
-            esp_ble_gattc_read_char(this->parent()->get_gattc_if(), this->parent()->get_conn_id(),
-                                    this->first_rec_char_handle_, ESP_GATT_AUTH_REQ_NONE);
-        if (read_first_rec_status) {
-          ESP_LOGW(TAG, "Error sending read request for first record, status=%d", read_first_rec_status);
-        }
+        this->start_collection();
+        break;
+      }
+      if (param->write.handle == this->first_rec_char_handle_) {
         break;
       }
 
@@ -476,6 +491,42 @@ void Powerpal::gap_event_handler(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_pa
     default:
       break;
   }
+}
+
+void Powerpal::start_collection() {
+#ifdef USE_HTTP_REQUEST
+  // If we can contact the API to get a last uploaded time, request history.
+  if (this->cloud_uploader_ != nullptr) {
+    http_request::HttpContainer cont = this->cloud_uploader_->get(this->powerpal_api_root_ + this->powerpal_api_device_, this->powerpal_headers_)
+    uint8_t buf[cont->content_length];
+    cont.read(&buf, cont->content_length);
+    JsonDocument doc;
+    deserializeJson(doc, buf);
+    time_t last_reading = doc["last_reading_timestamp"]
+    if (last_reading > 0) {
+      this->uploaded_ts_ = last_reading;
+      this->ingesting_history_ = true;
+    }
+  }
+#endif
+  auto status = esp_ble_gattc_register_for_notify(this->parent()->get_gattc_if(), this->parent()->get_remote_bda(),
+                                                  this->measurement_char_handle_);
+  if (status) {
+    ESP_LOGW(TAG, "[%s] esp_ble_gattc_register_for_notify failed, status=%d",
+              this->parent()->address_str().c_str(), status);
+  }
+
+#ifdef USE_HTTP_REQUEST
+  if (this->ingesting_history_) {
+    // read first record to fill in missing history
+    auto read_first_rec_status =
+        esp_ble_gattc_read_char(this->parent()->get_gattc_if(), this->parent()->get_conn_id(),
+                                this->first_rec_char_handle_, ESP_GATT_AUTH_REQ_NONE);
+    if (read_first_rec_status) {
+      ESP_LOGW(TAG, "Error sending read request for first record, status=%d", read_first_rec_status);
+    }
+  }
+#endif 
 }
 
 }  // namespace powerpal_ble

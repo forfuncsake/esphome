@@ -64,8 +64,6 @@ static const espbt::ESPBTUUID POWERPAL_BATTERY_CHARACTERISTIC_UUID = espbt::ESPB
 static const uint8_t seconds_in_minute = 60;    // seconds
 static const float kw_to_w_conversion = 1000.0;    // conversion ratio
 
-// static const std::string POWERPAL_API_URL = "https://readings.powerpal.net/api/v1/meter_reading/";
-
 class Powerpal : public esphome::ble_client::BLEClientNode, public Component {
   // class Powerpal : public esphome::ble_client::BLEClientNode, public PollingComponent {
  public:
@@ -83,6 +81,7 @@ class Powerpal : public esphome::ble_client::BLEClientNode, public Component {
   void set_daily_energy_sensor(sensor::Sensor *daily_energy_sensor) { daily_energy_sensor_ = daily_energy_sensor; }
 #ifdef USE_HTTP_REQUEST
   void set_http_request(http_request::HttpRequestComponent *cloud_uploader) { cloud_uploader_ = cloud_uploader; }
+  void set_powerpal_api_root(std::string api_root) { powerpal_api_root_ = api_root; }
 #endif
 #ifdef USE_TIME
   void set_time(time::RealTimeClock *time) { time_ = time; }
@@ -104,10 +103,11 @@ class Powerpal : public esphome::ble_client::BLEClientNode, public Component {
   void decode_(const uint8_t *data, uint16_t length);
   void parse_battery_(const uint8_t *data, uint16_t length);
   void parse_measurement_(const uint8_t *data, uint16_t length);
-  void process_first_rec_(const uint8_t *data, uint16_t length);
+  void start_collection();
   std::string uuid_to_device_id_(const uint8_t *data, uint16_t length);
   std::string serial_to_apikey_(const uint8_t *data, uint16_t length);
 #ifdef USE_HTTP_REQUEST
+  void process_first_rec_(const uint8_t *data, uint16_t length);
   void store_measurement_(uint16_t measurement, time_t timestamp, uint32_t watt_hours, float cost);
   void upload_data_to_cloud_();
 #endif
@@ -120,6 +120,10 @@ class Powerpal : public esphome::ble_client::BLEClientNode, public Component {
   sensor::Sensor *daily_energy_sensor_{nullptr};
 #ifdef USE_HTTP_REQUEST
   http_request::HttpRequestComponent *cloud_uploader_{nullptr};
+  bool ingesting_history_;
+  time_t recent_ts_ = 0;
+  time_t requested_ts_;
+  time_t uploaded_ts_ = 0;
 #endif
 #ifdef USE_TIME
   optional<time::RealTimeClock *> time_{};
@@ -136,8 +140,9 @@ class Powerpal : public esphome::ble_client::BLEClientNode, public Component {
   uint8_t stored_measurements_count_{0};
   std::vector<PowerpalMeasurement> past_measurements_;
   std::vector<PowerpalMeasurement> stored_measurements_;
-  // std::string powerpal_api_root_ = "http://192.168.1.167:1880/powerpal/";
-  std::string powerpal_api_root_ = "https://readings.powerpal.net/api/v1/meter_reading/";
+  std::string powerpal_api_root_ = "https://readings.powerpal.net";
+  std::string powerpal_api_device_ = "/api/v1/device/"
+  std::string powerpal_api_meter_ = "/api/v1/meter_reading/"
   std::string powerpal_device_id_; // = "00002bc3";
   std::string powerpal_apikey_; // = "4a89e298-b17b-43e7-a0c1-fcd1412e98ef";
 #ifdef USE_HTTP_REQUEST

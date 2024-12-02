@@ -32,6 +32,7 @@ CONF_NOTIFICATION_INTERVAL = "notification_interval"
 CONF_PULSES_PER_KWH = "pulses_per_kwh"
 CONF_HTTP_REQUEST_ID = "http_request_id"
 CONF_COST_PER_KWH = "cost_per_kwh"
+CONF_POWERPAL_API_ROOT = "powerpal_api_root"
 CONF_POWERPAL_DEVICE_ID = "powerpal_device_id"
 CONF_POWERPAL_APIKEY = "powerpal_apikey"
 CONF_DAILY_ENERGY = "daily_energy"
@@ -122,6 +123,7 @@ CONFIG_SCHEMA = cv.All(
                 http_request.HttpRequestComponent
             ),
             cv.Optional(CONF_COST_PER_KWH): cv.float_range(min=0),
+            cv.Optional(CONF_POWERPAL_API_ROOT): cv.string,
             cv.Optional(
                 CONF_POWERPAL_DEVICE_ID
             ): powerpal_deviceid,  # deviceid (optional) # if not configured, will grab from device
@@ -175,6 +177,9 @@ async def to_code(config):
 
     if CONF_COST_PER_KWH in config:
         cg.add(var.set_energy_cost(config[CONF_COST_PER_KWH]))
+
+    if CONF_POWERPAL_API_ROOT in config:
+        cg.add(var.set_powerpal_api_root(config[CONF_POWERPAL_API_ROOT]))
 
     if CONF_POWERPAL_DEVICE_ID in config:
         cg.add(var.set_device_id(config[CONF_POWERPAL_DEVICE_ID]))
