@@ -81,7 +81,6 @@ class Powerpal : public esphome::ble_client::BLEClientNode, public Component {
   void set_daily_energy_sensor(sensor::Sensor *daily_energy_sensor) { daily_energy_sensor_ = daily_energy_sensor; }
 #ifdef USE_HTTP_REQUEST
   void set_http_request(http_request::HttpRequestComponent *cloud_uploader) { cloud_uploader_ = cloud_uploader; }
-  void set_powerpal_api_root(std::string api_root) { powerpal_api_root_ = api_root; }
 #endif
 #ifdef USE_TIME
   void set_time(time::RealTimeClock *time) { time_ = time; }
@@ -96,6 +95,7 @@ class Powerpal : public esphome::ble_client::BLEClientNode, public Component {
   void set_notification_interval(uint8_t reading_batch_size) { reading_batch_size_[0] = reading_batch_size; }
   void set_device_id(std::string powerpal_device_id) { powerpal_device_id_ = powerpal_device_id; }
   void set_apikey(std::string powerpal_apikey) { powerpal_apikey_ = powerpal_apikey; }
+  void set_powerpal_api_root(std::string api_root) { powerpal_api_root_ = api_root; }
   void set_energy_cost(float energy_cost) { energy_cost_ = energy_cost; }
 
  protected:
