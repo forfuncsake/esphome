@@ -133,7 +133,7 @@ void Powerpal::parse_measurement_(const uint8_t *data, uint16_t length) {
       }
       if (this->ingesting_history_) {
         // request next batch of history
-        this->requested_ts += 60;
+        this->requested_ts_ += 60;
         uint8_t payload[8];
         payload[0] = (this->requested_ts_ & 0xff);
         payload[1] = ((this->requested_ts_ >> 8) & 0xff);
@@ -141,7 +141,7 @@ void Powerpal::parse_measurement_(const uint8_t *data, uint16_t length) {
         payload[3] = ((this->requested_ts_ >> 24) & 0xff);
 
         this->requested_ts_ += 840;
-        if this->requested_ts_ > this->recent_ts_ {
+        if (this->requested_ts_ > this->recent_ts_) {
           this->requested_ts_ = this->recent_ts_;
         }
         payload[4] = (this->requested_ts_ & 0xff);
@@ -209,7 +209,7 @@ void Powerpal::process_first_rec_(const uint8_t *data, uint16_t length) {
 
   // Request history in 15-measurement batches.
   this->requested_ts_ += 840;
-  if this->requested_ts_ > this->recent_ts_ {
+  if (this->requested_ts_ > this->recent_ts_) {
     this->requested_ts_ = this->recent_ts_;
   }
   payload[4] = (this->requested_ts_ & 0xff);
@@ -499,11 +499,11 @@ void Powerpal::start_collection() {
   if (this->cloud_uploader_ != nullptr) {
     std::string url = this->powerpal_api_root_ + this->powerpal_api_device_;
     ESP_LOGI(TAG, "Powerpal api URL: %s", url.c_str());
-    http_request::HttpContainer cont = this->cloud_uploader_->get(url, this->powerpal_headers_);
+    http_request::HttpContainer *cont = this->cloud_uploader_->get(url, this->powerpal_headers_);
     ESP_LOGD(TAG, "Got http api bytes: %d", cont->content_length);
     uint8_t buf[cont->content_length];
     cont.read(&buf, cont->content_length);
-    JsonDocument doc;
+    StaticJsonDocument<360> doc;
     deserializeJson(doc, buf);
     time_t last_reading = doc["last_reading_timestamp"];
     if (last_reading > 0) {
