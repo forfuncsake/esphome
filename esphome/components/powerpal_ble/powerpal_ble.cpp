@@ -500,9 +500,9 @@ void Powerpal::start_collection() {
     std::string url = this->powerpal_api_root_ + this->powerpal_api_device_;
     ESP_LOGI(TAG, "Powerpal api URL: %s", url.c_str());
     std::shared_ptr<http_request::HttpContainer> cont = this->cloud_uploader_->get(url, this->powerpal_headers_);
-    ESP_LOGD(TAG, "Got http api bytes: %d", cont->content_length);
-    uint8_t buf[cont->content_length];
-    cont->read(&buf, cont->content_length);
+    ESP_LOGD(TAG, "Got http api bytes: %d", *cont->content_length);
+    uint8_t *buf = allocator.allocate(*cont->content_length);
+    cont->read(buf, *cont->content_length);
     StaticJsonDocument<360> doc;
     deserializeJson(doc, buf);
     time_t last_reading = doc["last_reading_timestamp"];
