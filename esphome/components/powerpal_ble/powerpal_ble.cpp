@@ -497,13 +497,17 @@ void Powerpal::start_collection() {
 #ifdef USE_HTTP_REQUEST
   // If we can contact the API to get a last uploaded time, request history.
   if (this->cloud_uploader_ != nullptr) {
-    http_request::HttpContainer cont = this->cloud_uploader_->get(this->powerpal_api_root_ + this->powerpal_api_device_, this->powerpal_headers_)
+    std::string url = this->powerpal_api_root_ + this->powerpal_api_device_;
+    ESP_LOGI(TAG, "Powerpal api URL: %s", url.c_str());
+    http_request::HttpContainer cont = this->cloud_uploader_->get(url, this->powerpal_headers_);
+    ESP_LOGD(TAG, "Got http api bytes: %d", cont->content_length);
     uint8_t buf[cont->content_length];
     cont.read(&buf, cont->content_length);
     JsonDocument doc;
     deserializeJson(doc, buf);
-    time_t last_reading = doc["last_reading_timestamp"]
+    time_t last_reading = doc["last_reading_timestamp"];
     if (last_reading > 0) {
+      ESP_LOGI(TAG, "Found last reading: %ld", last_reading);
       this->uploaded_ts_ = last_reading;
       this->ingesting_history_ = true;
     }
