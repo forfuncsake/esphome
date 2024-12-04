@@ -19,11 +19,17 @@ void Powerpal::dump_config() {
 
 void Powerpal::setup() {
   this->authenticated_ = false;
+  this->batch_size_set_ - false;
+  this->collecting_ = false;
   this->pulse_multiplier_ = ((seconds_in_minute * this->reading_batch_size_[0]) / (this->pulses_per_kwh_ / kw_to_w_conversion));
   ESP_LOGD(TAG, "pulse_multiplier_: %f", this->pulse_multiplier_ );
 
 #ifdef USE_HTTP_REQUEST
     this->stored_measurements_.resize(15); //TODO dynamic
+    this->ingesting_history_ = false;
+    this->recent_ts_ = 0;
+    this->requested_ts_ = 0;
+    this->uploaded_ts_ = 0;
 #endif
 }
 
@@ -58,6 +64,7 @@ void Powerpal::parse_measurement_(const uint8_t *data, uint16_t length) {
 #ifdef USE_HTTP_REQUEST
     if (this->ingesting_history_ && unix_time > this->recent_ts_) {
       // Drop this record for now, we'll get it again later once caught up.
+      ESP_LOGD(TAG, "Dropping measurement for %ld while we ingest history", unix_time);
       this->recent_ts_ = unix_time;
       return;
     }
@@ -131,7 +138,7 @@ void Powerpal::parse_measurement_(const uint8_t *data, uint16_t length) {
       if (this->stored_measurements_count_ == 15) {
         this->upload_data_to_cloud_();
       }
-      if (this->ingesting_history_) {
+      if (this->ingesting_history_ && unix_time == this->requested_ts_) {
         // request next batch of history
         this->requested_ts_ += 60;
         uint8_t payload[8];
@@ -196,6 +203,7 @@ void Powerpal::process_first_rec_(const uint8_t *data, uint16_t length) {
 
   this->recent_ts_ = (data[7] << 24) | (data[6] << 16) | (data[5] << 8) | (data[4]);
   this->requested_ts_ = (data[3] << 24) | (data[2] << 16) | (data[1] << 8) | (data[0]);
+  ESP_LOGI(TAG, "Powerpal has records stored from %ld to %ld", this->requested_ts_, is->recent_ts_);
 
   if (this->requested_ts_ < this->uploaded_ts_) {
     this->requested_ts_ = this->uploaded_ts_;
@@ -292,8 +300,7 @@ void Powerpal::gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_t gat
               ESP_LOGW(TAG, "Error sending write request for batch_size, status=%d", status);
             }
           } else {
-            // reading batch size is set correctly so subscribe to measurement notifications
-            this->start_collection();
+            this->batch_size_set_ = true;
           }
         } else {
           // error, length should be 4
@@ -378,6 +385,7 @@ void Powerpal::gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_t gat
       if (param->write.handle == this->pairing_code_char_handle_ && !this->authenticated_) {
         this->authenticated_ = true;
 
+        // read measurement notification batch size
         auto read_reading_batch_size_status =
             esp_ble_gattc_read_char(this->parent()->get_gattc_if(), this->parent()->get_conn_id(),
                                     this->reading_batch_size_char_handle_, ESP_GATT_AUTH_REQ_NONE);
@@ -393,6 +401,7 @@ void Powerpal::gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_t gat
             ESP_LOGW(TAG, "Error sending read request for powerpal uuid, status=%d", read_uuid_status);
           }
         }
+
         if (!this->powerpal_device_id_.length()) {
           // read serial number (device id)
           auto read_serial_number_status = esp_ble_gattc_read_char(this->parent()->get_gattc_if(), this->parent()->get_conn_id(),
@@ -438,10 +447,13 @@ void Powerpal::gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_t gat
       }
       if (param->write.handle == this->reading_batch_size_char_handle_) {
         // reading batch size is now set correctly so subscribe to measurement notifications
-        this->start_collection();
+        this->batch_size_set_ = true;
         break;
       }
       if (param->write.handle == this->first_rec_char_handle_) {
+        break;
+      }
+      if (param->write.handle == this->measurement_access_char_handle_) {
         break;
       }
 
@@ -471,6 +483,10 @@ void Powerpal::gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_t gat
     default:
       break;
   }
+
+  if (this->powerpal_device_id_.length() && this->powerpal_apikey_.length() && this->batch_size_set_) {
+    this->start_collection();
+  }
 }
 
 void Powerpal::gap_event_handler(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t *param) {
@@ -494,6 +510,11 @@ void Powerpal::gap_event_handler(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_pa
 }
 
 void Powerpal::start_collection() {
+  if (this->collecting_)
+    return;
+  }
+  this->collecting_ = true;
+
 #ifdef USE_HTTP_REQUEST
   // If we can contact the API to get a last uploaded time, request history.
   if (this->cloud_uploader_ != nullptr) {
@@ -508,7 +529,7 @@ void Powerpal::start_collection() {
     deserializeJson(doc, buf);
     time_t last_reading = doc["last_reading_timestamp"];
     if (last_reading > 0) {
-      ESP_LOGI(TAG, "Found last reading: %ld", last_reading);
+      ESP_LOGI(TAG, "Found last uploaded reading: %ld", last_reading);
       this->uploaded_ts_ = last_reading;
       this->ingesting_history_ = true;
     }

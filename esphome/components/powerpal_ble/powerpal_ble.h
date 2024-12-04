@@ -33,22 +33,6 @@ struct PowerpalMeasurement {
   // bool is_peak;
 };
 
-static const espbt::ESPBTUUID POWERPAL_SERVICE_UUID =
-    espbt::ESPBTUUID::from_raw("59DAABCD-12F4-25A6-7D4F-55961DCE4205");
-static const espbt::ESPBTUUID POWERPAL_CHARACTERISTIC_PAIRING_CODE_UUID =
-    espbt::ESPBTUUID::from_raw("59DA0011-12F4-25A6-7D4F-55961DCE4205");  // indicate, notify, read, write
-static const espbt::ESPBTUUID POWERPAL_CHARACTERISTIC_READING_BATCH_SIZE_UUID =
-    espbt::ESPBTUUID::from_raw("59DA0013-12F4-25A6-7D4F-55961DCE4205");  // indicate, notify, read, write
-static const espbt::ESPBTUUID POWERPAL_CHARACTERISTIC_MEASUREMENT_UUID =
-    espbt::ESPBTUUID::from_raw("59DA0001-12F4-25A6-7D4F-55961DCE4205");  // notify, read, write
-static const espbt::ESPBTUUID POWERPAL_CHARACTERISTIC_UUID_UUID =
-    espbt::ESPBTUUID::from_raw("59DA0009-12F4-25A6-7D4F-55961DCE4205");  // indicate, notify, read, write
-static const espbt::ESPBTUUID POWERPAL_CHARACTERISTIC_SERIAL_UUID =
-    espbt::ESPBTUUID::from_raw("59DA0010-12F4-25A6-7D4F-55961DCE4205");  // indicate, notify, read, write
-
-static const espbt::ESPBTUUID POWERPAL_BATTERY_SERVICE_UUID = espbt::ESPBTUUID::from_uint16(0x180F);
-static const espbt::ESPBTUUID POWERPAL_BATTERY_CHARACTERISTIC_UUID = espbt::ESPBTUUID::from_uint16(0x2A19);
-
 // time: '59DA0004-12F4-25A6-7D4F-55961DCE4205',
 // ledSensitivity: '59DA0008-12F4-25A6-7D4F-55961DCE4205',
 // uuid: '59DA0009-12F4-25A6-7D4F-55961DCE4205',
@@ -65,15 +49,12 @@ static const uint8_t seconds_in_minute = 60;    // seconds
 static const float kw_to_w_conversion = 1000.0;    // conversion ratio
 
 class Powerpal : public esphome::ble_client::BLEClientNode, public Component {
-  // class Powerpal : public esphome::ble_client::BLEClientNode, public PollingComponent {
  public:
   void setup() override;
-  // void loop() override;
   void gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_if,
                            esp_ble_gattc_cb_param_t *param) override;
   void gap_event_handler(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t *param) override;
   void dump_config() override;
-  // float get_setup_priority() const override { return setup_priority::DATA; }
   float get_setup_priority() const override { return setup_priority::AFTER_WIFI; }
   void set_battery(sensor::Sensor *battery) { battery_ = battery; }
   void set_power_sensor(sensor::Sensor *power_sensor) { power_sensor_ = power_sensor; }
@@ -113,6 +94,8 @@ class Powerpal : public esphome::ble_client::BLEClientNode, public Component {
 #endif
 
   bool authenticated_;
+  bool batch_size_set_;
+  bool collecting_;
 
   sensor::Sensor *battery_{nullptr};
   sensor::Sensor *power_sensor_{nullptr};
@@ -121,9 +104,9 @@ class Powerpal : public esphome::ble_client::BLEClientNode, public Component {
 #ifdef USE_HTTP_REQUEST
   http_request::HttpRequestComponent *cloud_uploader_{nullptr};
   bool ingesting_history_;
-  time_t recent_ts_ = 0;
+  time_t recent_ts_;
   time_t requested_ts_;
-  time_t uploaded_ts_ = 0;
+  time_t uploaded_ts_;
 #endif
 #ifdef USE_TIME
   optional<time::RealTimeClock *> time_{};
@@ -138,7 +121,6 @@ class Powerpal : public esphome::ble_client::BLEClientNode, public Component {
   uint64_t total_pulses_{0};
 
   uint8_t stored_measurements_count_{0};
-  std::vector<PowerpalMeasurement> past_measurements_;
   std::vector<PowerpalMeasurement> stored_measurements_;
   std::string powerpal_api_root_ = "https://readings.powerpal.net";
   std::string powerpal_api_device_ = "/api/v1/device/";
