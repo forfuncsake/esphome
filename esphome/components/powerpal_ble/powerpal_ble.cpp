@@ -65,6 +65,7 @@ void Powerpal::parse_measurement_(const uint8_t *data, uint16_t length) {
     if (this->ingesting_history_ && unix_time > this->recent_ts_) {
       // Drop this record for now, we'll get it again later once caught up.
       ESP_LOGD(TAG, "Dropping measurement for %ld while we ingest history", unix_time);
+      ESP_LOGD(TAG, "Requested: %ld, Recent: %ld", this->requested_ts_, this->recent_ts_);
       this->recent_ts_ = unix_time;
       return;
     }
@@ -139,6 +140,9 @@ void Powerpal::parse_measurement_(const uint8_t *data, uint16_t length) {
         this->upload_data_to_cloud_();
       }
       if (this->ingesting_history_ && unix_time == this->requested_ts_) {
+        // give the system half a sec to breathe
+        std::this_thread::sleep_for(std::chrono::milliseconds(500));
+
         // request next batch of history
         this->requested_ts_ += 60;
         uint8_t payload[8];
@@ -206,7 +210,7 @@ void Powerpal::process_first_rec_(const uint8_t *data, uint16_t length) {
   ESP_LOGI(TAG, "Powerpal has records stored from %ld to %ld", this->requested_ts_, this->recent_ts_);
 
   if (this->requested_ts_ < this->uploaded_ts_) {
-    this->requested_ts_ = this->uploaded_ts_;
+    this->requested_ts_ = this->uploaded_ts_ + 60;
   }
 
   uint8_t payload[8];
