@@ -203,7 +203,7 @@ void Powerpal::process_first_rec_(const uint8_t *data, uint16_t length) {
 
   this->recent_ts_ = (data[7] << 24) | (data[6] << 16) | (data[5] << 8) | (data[4]);
   this->requested_ts_ = (data[3] << 24) | (data[2] << 16) | (data[1] << 8) | (data[0]);
-  ESP_LOGI(TAG, "Powerpal has records stored from %ld to %ld", this->requested_ts_, is->recent_ts_);
+  ESP_LOGI(TAG, "Powerpal has records stored from %ld to %ld", this->requested_ts_, this->recent_ts_);
 
   if (this->requested_ts_ < this->uploaded_ts_) {
     this->requested_ts_ = this->uploaded_ts_;
@@ -510,7 +510,7 @@ void Powerpal::gap_event_handler(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_pa
 }
 
 void Powerpal::start_collection() {
-  if (this->collecting_)
+  if (this->collecting_) {
     return;
   }
   this->collecting_ = true;
