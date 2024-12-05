@@ -141,7 +141,7 @@ void Powerpal::parse_measurement_(const uint8_t *data, uint16_t length) {
       }
       if (this->ingesting_history_ && unix_time == this->requested_ts_) {
         // give the system half a sec to breathe
-        //std::this_thread::sleep_for(std::chrono::milliseconds(800));
+        std::this_thread::sleep_for(std::chrono::milliseconds(800));
 
         // request next batch of history
         this->requested_ts_ += 60;
