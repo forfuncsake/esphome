@@ -141,7 +141,7 @@ void Powerpal::parse_measurement_(const uint8_t *data, uint16_t length) {
       }
       if (this->ingesting_history_ && unix_time == this->requested_ts_) {
         // give the system half a sec to breathe
-        std::this_thread::sleep_for(std::chrono::milliseconds(800));
+        //std::this_thread::sleep_for(std::chrono::milliseconds(800));
 
         // request next batch of history
         this->requested_ts_ += 60;
@@ -208,10 +208,6 @@ void Powerpal::process_first_rec_(const uint8_t *data, uint16_t length) {
   this->recent_ts_ = (data[7] << 24) | (data[6] << 16) | (data[5] << 8) | (data[4]);
   this->requested_ts_ = (data[3] << 24) | (data[2] << 16) | (data[1] << 8) | (data[0]);
   ESP_LOGI(TAG, "Powerpal has records stored from %ld to %ld", this->requested_ts_, this->recent_ts_);
-
-  // TEMP -- DELETE ME
-  this->uploaded_ts_ = recent_ts_ - 1200;
-  // END TEMP
 
   if (this->requested_ts_ < this->uploaded_ts_) {
     this->requested_ts_ = this->uploaded_ts_ + 60;
