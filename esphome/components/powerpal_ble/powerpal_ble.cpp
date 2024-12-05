@@ -210,7 +210,7 @@ void Powerpal::process_first_rec_(const uint8_t *data, uint16_t length) {
   ESP_LOGI(TAG, "Powerpal has records stored from %ld to %ld", this->requested_ts_, this->recent_ts_);
 
   // TEMP -- DELETE ME
-  this->uploaded_ts_ = recent_ts_ - 1200
+  this->uploaded_ts_ = recent_ts_ - 1200;
   // END TEMP
 
   if (this->requested_ts_ < this->uploaded_ts_) {
