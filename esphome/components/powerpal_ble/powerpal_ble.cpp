@@ -133,7 +133,7 @@ void Powerpal::parse_measurement_(const uint8_t *data, uint16_t length) {
       this->store_measurement_(
         pulses_within_interval,
         unix_time,
-        float_t(pulses_within_interval * kw_to_w_conversion) / this->pulses_per_kwh_,
+        (float_t(pulses_within_interval * kw_to_w_conversion) / this->pulses_per_kwh_),
       );
       if (this->stored_measurements_count_ == 15) {
         this->upload_data_to_cloud_();
