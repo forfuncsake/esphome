@@ -31,7 +31,6 @@ CONF_PAIRING_CODE = "pairing_code"
 CONF_NOTIFICATION_INTERVAL = "notification_interval"
 CONF_PULSES_PER_KWH = "pulses_per_kwh"
 CONF_HTTP_REQUEST_ID = "http_request_id"
-CONF_COST_PER_KWH = "cost_per_kwh"
 CONF_POWERPAL_API_ROOT = "powerpal_api_root"
 CONF_POWERPAL_DEVICE_ID = "powerpal_device_id"
 CONF_POWERPAL_APIKEY = "powerpal_apikey"
@@ -43,10 +42,6 @@ def _validate(config):
         _LOGGER.warning(
             "Using daily_energy without a time_id means relying on your Powerpal's RTC for packet times, which is not recommended. "
             "Please consider adding a time component to your ESPHome yaml, and it's time_id to your powerpal_ble component."
-        )
-    if CONF_HTTP_REQUEST_ID in config and CONF_COST_PER_KWH not in config:
-        raise cv.Invalid(
-            f"If using the Powerpal cloud uploader, you must also set '{CONF_COST_PER_KWH}'"
         )
     return config
 
@@ -122,7 +117,6 @@ CONFIG_SCHEMA = cv.All(
             cv.Optional(CONF_HTTP_REQUEST_ID): cv.use_id(
                 http_request.HttpRequestComponent
             ),
-            cv.Optional(CONF_COST_PER_KWH): cv.float_range(min=0),
             cv.Optional(CONF_POWERPAL_API_ROOT): cv.string,
             cv.Optional(
                 CONF_POWERPAL_DEVICE_ID
@@ -174,9 +168,6 @@ async def to_code(config):
         cg.add_define("USE_HTTP_REQUEST")
         http_request_component = await cg.get_variable(config[CONF_HTTP_REQUEST_ID])
         cg.add(var.set_http_request(http_request_component))
-
-    if CONF_COST_PER_KWH in config:
-        cg.add(var.set_energy_cost(config[CONF_COST_PER_KWH]))
 
     if CONF_POWERPAL_API_ROOT in config:
         cg.add(var.set_powerpal_api_root(config[CONF_POWERPAL_API_ROOT]))

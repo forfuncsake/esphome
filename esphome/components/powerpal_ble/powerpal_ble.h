@@ -31,7 +31,6 @@ struct PowerpalMeasurement {
   uint16_t pulses;
   time_t timestamp;
   uint32_t watt_hours;
-  float cost;
   // bool is_peak;
 };
 
@@ -79,7 +78,6 @@ class Powerpal : public esphome::ble_client::BLEClientNode, public Component {
   void set_device_id(std::string powerpal_device_id) { powerpal_device_id_ = powerpal_device_id; }
   void set_apikey(std::string powerpal_apikey) { powerpal_apikey_ = powerpal_apikey; }
   void set_powerpal_api_root(std::string api_root) { powerpal_api_root_ = api_root; }
-  void set_energy_cost(float energy_cost) { energy_cost_ = energy_cost; }
 
  protected:
   std::string pkt_to_hex_(const uint8_t *data, uint16_t len);
@@ -91,7 +89,7 @@ class Powerpal : public esphome::ble_client::BLEClientNode, public Component {
   std::string serial_to_apikey_(const uint8_t *data, uint16_t length);
 #ifdef USE_HTTP_REQUEST
   void process_first_rec_(const uint8_t *data, uint16_t length);
-  void store_measurement_(uint16_t measurement, time_t timestamp, uint32_t watt_hours, float cost);
+  void store_measurement_(uint16_t measurement, time_t timestamp, uint32_t watt_hours);
   void upload_data_to_cloud_();
 #endif
 
@@ -132,7 +130,6 @@ class Powerpal : public esphome::ble_client::BLEClientNode, public Component {
 #ifdef USE_HTTP_REQUEST
   std::list<http_request::Header> powerpal_headers_;
 #endif
-  float energy_cost_;
 
   uint16_t pairing_code_char_handle_ = 0x2e;
   uint16_t reading_batch_size_char_handle_ = 0x33;

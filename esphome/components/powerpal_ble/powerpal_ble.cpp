@@ -134,7 +134,6 @@ void Powerpal::parse_measurement_(const uint8_t *data, uint16_t length) {
         pulses_within_interval,
         unix_time,
         (uint32_t)roundf(pulses_within_interval * (this->pulses_per_kwh_ / kw_to_w_conversion)),
-        (pulses_within_interval / this->pulses_per_kwh_) * this->energy_cost_
       );
       if (this->stored_measurements_count_ == 15) {
         this->upload_data_to_cloud_();
@@ -240,11 +239,10 @@ void Powerpal::process_first_rec_(const uint8_t *data, uint16_t length) {
   }
 }
 
-void Powerpal::store_measurement_(uint16_t pulses, time_t timestamp, uint32_t watt_hours, float cost) {
+void Powerpal::store_measurement_(uint16_t pulses, time_t timestamp, uint32_t watt_hours) {
   this->stored_measurements_[this->stored_measurements_count_].pulses = pulses;
   this->stored_measurements_[this->stored_measurements_count_].timestamp = timestamp;
   this->stored_measurements_[this->stored_measurements_count_].watt_hours = watt_hours;
-  this->stored_measurements_[this->stored_measurements_count_].cost = cost;
   this->stored_measurements_count_++;
 }
 
@@ -259,7 +257,6 @@ void Powerpal::upload_data_to_cloud_() {
         nested["timestamp"] = this->stored_measurements_[i].timestamp;
         nested["pulses"] = this->stored_measurements_[i].pulses;
         nested["watt_hours"] = this->stored_measurements_[i].watt_hours;
-        nested["cost"] = this->stored_measurements_[i].cost;
         nested["is_peak"] = false;
       }
     }
