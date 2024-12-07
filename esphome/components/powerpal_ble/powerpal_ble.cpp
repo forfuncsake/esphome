@@ -135,7 +135,7 @@ void Powerpal::parse_measurement_(const uint8_t *data, uint16_t length) {
         unix_time,
         (float_t)(pulses_within_interval * kw_to_w_conversion) / this->pulses_per_kwh_
       );
-      if (this->stored_measurements_count_ == 15) {
+      if (this->stored_measurements_count_ == 15 || !this->ingesting_history_) {
         this->upload_data_to_cloud_();
       }
       if (this->ingesting_history_ && unix_time == this->requested_ts_) {
@@ -258,6 +258,7 @@ void Powerpal::upload_data_to_cloud_() {
         nested["pulses"] = this->stored_measurements_[i].pulses;
         nested["watt_hours"] = this->stored_measurements_[i].watt_hours;
         nested["is_peak"] = false;
+        this->stored_measurements_[i].timestamp = 0;
       }
     }
     std::string body;
