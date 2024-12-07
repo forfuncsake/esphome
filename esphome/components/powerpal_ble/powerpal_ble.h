@@ -30,7 +30,7 @@ namespace espbt = esphome::esp32_ble_tracker;
 struct PowerpalMeasurement {
   uint16_t pulses;
   time_t timestamp;
-  uint32_t watt_hours;
+  float_t watt_hours;
   // bool is_peak;
 };
 
@@ -89,7 +89,7 @@ class Powerpal : public esphome::ble_client::BLEClientNode, public Component {
   std::string serial_to_apikey_(const uint8_t *data, uint16_t length);
 #ifdef USE_HTTP_REQUEST
   void process_first_rec_(const uint8_t *data, uint16_t length);
-  void store_measurement_(uint16_t measurement, time_t timestamp, uint32_t watt_hours);
+  void store_measurement_(uint16_t measurement, time_t timestamp, float_t watt_hours);
   void upload_data_to_cloud_();
 #endif
 
