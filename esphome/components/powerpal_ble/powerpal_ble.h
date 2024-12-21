@@ -8,8 +8,6 @@
 #ifdef USE_HTTP_REQUEST
 #include "esphome/components/http_request/http_request.h"
 #include <ArduinoJson.h>
-#include <chrono>
-#include <thread>
 #endif
 
 #ifdef USE_TIME
